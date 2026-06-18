@@ -1,0 +1,25 @@
+{
+  "name": "triagekit",
+  "version": "0.1.0",
+  "description": "A lightweight PR triage CLI for maintainers.",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "tsx src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "build": "tsc"
+  },
+  "dependencies": {
+    "@octokit/request-error": "^6.1.8",
+    "@octokit/rest": "^21.1.1",
+    "commander": "^14.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.3",
+    "tsx": "^4.20.3",
+    "typescript": "^5.8.3"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
