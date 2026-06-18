@@ -13,3 +13,22 @@ export interface RepositorySlug {
   owner: string;
   repo: string;
 }
+
+export interface PullRequestFile {
+  filename: string;
+  status: string;
+  additions: number;
+  deletions: number;
+  changes: number;
+  patch?: string;
+}
+
+export interface PullRequestFileSummary {
+  packageRoots: string[];
+  detectedPackageNames: string[];
+  touchesDemoTesting: boolean;
+  touchesCore: boolean;
+  totalFilesChanged: number;
+  totalAdditions: number;
+  totalDeletions: number;
+}
