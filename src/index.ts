@@ -4,7 +4,11 @@ import { RequestError } from "@octokit/request-error";
 import { detectPackageChanges } from "./analysis/detectPackageChanges.js";
 import { getPullRequestFiles } from "./github/getPullRequestFiles.js";
 import { getPullRequests } from "./github/getPullRequests.js";
+import { runRules } from "./rules/runRules.js";
+import { scorePullRequest } from "./scoring/scorePullRequest.js";
 import type { PullRequestFileSummary, PullRequestMetadata, RepositorySlug } from "./github/types.js";
+import type { RuleResult, RuleStatus } from "./rules/types.js";
+import type { TriageClassification, TriageScore } from "./scoring/types.js";
 
 const DEFAULT_LIMIT = 10;
 const MAX_LIMIT = 100;
@@ -64,10 +68,75 @@ function printFileSummary(summary: PullRequestFileSummary): void {
   console.log(`Touches core: ${summary.touchesCore ? "yes" : "no"}`);
 }
 
+function statusIcon(status: RuleStatus): string {
+  switch (status) {
+    case "pass":
+      return "✅";
+    case "fail":
+      return "❌";
+    case "warning":
+      return "⚠️";
+    case "unknown":
+      return "➖";
+  }
+}
+
+function printRuleResults(results: RuleResult[]): void {
+  console.log("Rules:");
+
+  for (const result of results) {
+    console.log(`${statusIcon(result.status)} ${result.label}: ${result.reason}`);
+  }
+}
+
+function formatClassification(classification: TriageClassification): string {
+  switch (classification) {
+    case "ready_for_founder_review":
+      return "Ready for founder review";
+    case "almost_ready":
+      return "Almost ready";
+    case "needs_author_action":
+      return "Needs author action";
+    case "risky":
+      return "Risky / broad";
+    case "not_ready":
+      return "Not ready";
+  }
+}
+
+function printListSection(label: string, items: string[]): void {
+  console.log(`${label}:`);
+
+  if (items.length === 0) {
+    console.log("- none");
+    return;
+  }
+
+  for (const item of items) {
+    console.log(`- ${item}`);
+  }
+}
+
+function printTriageScore(score: TriageScore, options: { breakdown: boolean }): void {
+  console.log(`Score: ${score.score}/${score.maxScore}`);
+  console.log(`Classification: ${formatClassification(score.classification)}`);
+  console.log(`Founder action: ${score.founderAction}`);
+  printListSection("Blockers", score.blockers);
+  printListSection("Risk signals", score.riskSignals);
+
+  if (options.breakdown) {
+    console.log("Breakdown:");
+
+    for (const item of score.breakdown) {
+      console.log(`- ${item.label}: ${item.points}/${item.maxPoints}`);
+    }
+  }
+}
+
 async function printPullRequests(
   repository: RepositorySlug,
   pullRequests: PullRequestMetadata[],
-  options: { token?: string; files: boolean },
+  options: { token?: string; files: boolean; rules: boolean; breakdown: boolean },
 ): Promise<void> {
   if (pullRequests.length === 0) {
     console.log("No open pull requests found.");
@@ -86,6 +155,19 @@ async function printPullRequests(
       const summary = detectPackageChanges(changedFiles);
 
       printFileSummary(summary);
+
+      if (options.rules) {
+        const ruleResults = runRules({
+          pullRequest,
+          changedFiles,
+          summary,
+        });
+
+        printRuleResults(ruleResults);
+        printTriageScore(scorePullRequest(ruleResults), {
+          breakdown: options.breakdown,
+        });
+      }
 
       if (options.files) {
         console.log("Changed files:");
@@ -147,7 +229,14 @@ program
   .argument("<repository>", "GitHub repository in owner/repo format", parseRepositorySlug)
   .option("-l, --limit <count>", "maximum number of pull requests to fetch", parseLimit, DEFAULT_LIMIT)
   .option("--files", "print changed file paths for each pull request")
-  .action(async (repository: RepositorySlug, options: { limit: number; files: boolean }) => {
+  .option("--no-rules", "do not print readiness rule results")
+  .option("--breakdown", "print full score breakdown")
+  .option("--no-breakdown", "do not print full score breakdown")
+  .action(
+    async (
+      repository: RepositorySlug,
+      options: { limit: number; files: boolean; rules: boolean; breakdown?: boolean },
+    ) => {
     try {
       const token = process.env.GITHUB_TOKEN;
       const pullRequests = await getPullRequests({
@@ -159,6 +248,8 @@ program
       await printPullRequests(repository, pullRequests, {
         token,
         files: options.files,
+        rules: options.rules,
+        breakdown: options.breakdown === true,
       });
     } catch (error) {
       if (error instanceof RequestError) {
@@ -171,6 +262,7 @@ program
       console.error(`Unexpected error: ${message}`);
       process.exitCode = 1;
     }
-  });
+  },
+  );
 
 program.parseAsync(process.argv);

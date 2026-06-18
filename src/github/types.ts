@@ -1,6 +1,7 @@
 export interface PullRequestMetadata {
   number: number;
   title: string;
+  body: string;
   authorLogin: string;
   draft: boolean;
   state: string;

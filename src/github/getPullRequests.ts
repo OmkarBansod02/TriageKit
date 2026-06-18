@@ -29,6 +29,7 @@ export async function getPullRequests({
   return response.data.map((pullRequest) => ({
     number: pullRequest.number,
     title: pullRequest.title,
+    body: pullRequest.body ?? "",
     authorLogin: pullRequest.user?.login ?? "unknown",
     draft: pullRequest.draft ?? false,
     state: pullRequest.state,
