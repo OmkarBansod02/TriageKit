@@ -76,18 +76,18 @@ export function suggestedContributorComment(item: AnalyzedPullRequest): string {
   if (blockers.length > 0) {
     return `Thanks for the PR! Before this is ready for maintainer review, please fix: ${blockers
       .slice(0, 2)
-      .join("; ")}. After that, this should be easier to review.`;
+      .join("; ")}. Once that's done, it should be much easier to review.`;
   }
 
   if (riskSignals.length > 0) {
-    return `Thanks for the PR! This looks close, but maintainers may need to review these risk areas carefully: ${riskSignals
+    return `Thanks for the PR! This looks close, but maintainers may need to look carefully at: ${riskSignals
       .slice(0, 2)
       .join("; ")}.`;
   }
 
   if (classification === "ready_for_founder_review") {
-    return "Thanks for the PR! This looks ready for maintainer review based on the automated triage checks.";
+    return "Thanks for the PR! Based on the automated triage checks, this looks ready for maintainer review.";
   }
 
-  return "Thanks for the PR! This looks ready for maintainer review based on the automated triage checks.";
+  return "Thanks for the PR! Based on the automated triage checks, this looks ready for maintainer review.";
 }

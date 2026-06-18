@@ -120,6 +120,8 @@ export function generateMarkdownReport(report: TriageReport): string {
   const lines: string[] = [
     "# TriageKit PR Readiness Report",
     "",
+    "This report helps maintainers decide which PRs are worth deep review first and which need contributor follow-up.",
+    "",
     `* Repository: ${report.repository}`,
     `* Generated at: ${report.generatedAt}`,
     `* PRs scanned: ${report.pullRequests.length}`,
@@ -132,7 +134,14 @@ export function generateMarkdownReport(report: TriageReport): string {
         `| ${formatClassification(classification)} | ${counts[classification].toString().padStart(5, " ")} |`,
     ),
     "",
-    "## Most urgent author actions",
+    "## How to use this report",
+    "",
+    '* Start with "Ready for founder review"',
+    '* Send suggested comments for "Needs author action"',
+    '* Review "Risky / broad" separately because they may touch framework/core paths',
+    "* Treat scores as prioritization signals, not correctness guarantees",
+    "",
+    "## PRs needing author action",
     "",
     ...renderUrgentAuthorActions(report.pullRequests),
     "",
@@ -158,6 +167,17 @@ export function generateMarkdownReport(report: TriageReport): string {
       lines.push(...renderPrCard(item));
     }
   }
+
+  lines.push(
+    "## Limitations",
+    "",
+    "* Does not verify code correctness",
+    "* Does not replace CI, Greptile, or human review",
+    "* Does not run untrusted PR code",
+    "* Does not comment or label PRs",
+    "* Some rules are heuristic and should be tuned with maintainer feedback",
+    "",
+  );
 
   return `${lines.join("\n").trimEnd()}\n`;
 }

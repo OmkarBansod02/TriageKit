@@ -217,6 +217,8 @@ function printReportSummary(reportPath: string, pullRequests: AnalyzedPullReques
   const counts = createClassificationCounts(pullRequests);
 
   console.log(`Report written to ${reportPath}`);
+  console.log("Open it with:");
+  console.log(`code ${reportPath}`);
   console.log(`PRs scanned: ${pullRequests.length}`);
   console.log("Counts per bucket:");
 

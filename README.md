@@ -1,8 +1,24 @@
 # TriageKit
 
-A lightweight PR triage CLI for maintainers.
+TriageKit is a lightweight, read-only PR triage CLI for maintainers.
 
-TriageKit is a read-only command line tool for inspecting GitHub pull requests. It fetches open pull requests from public repositories, prints basic metadata, summarizes changed files, detects simple package/core path touches, runs deterministic readiness rules, and calculates a maintainer-facing triage score so maintainers have a small foundation for future triage workflows.
+It scans public GitHub pull requests, fetches changed files, runs deterministic readiness checks, calculates a triage score, and can generate a founder-ready markdown report.
+
+## Why It Exists
+
+High-volume OSS projects can receive more pull requests than maintainers can deeply review. TriageKit helps maintainers quickly separate:
+
+- PRs that look ready for deeper review
+- PRs that need contributor follow-up
+- PRs that are broad or risky enough to review separately
+
+It is a prioritization tool, not a merge decision.
+
+## Current Status
+
+V0 proof of concept.
+
+TriageKit is read-only. It reads public GitHub PR data and writes only local terminal output or a local markdown report.
 
 ## Setup
 
@@ -11,98 +27,64 @@ pnpm install
 pnpm typecheck
 ```
 
-## GitHub Token
-
-TriageKit can read public repositories without authentication. To increase GitHub API rate limits, set an optional token:
+Optional GitHub token for higher public API limits:
 
 ```sh
 export GITHUB_TOKEN=ghp_your_token_here
 ```
 
-The CLI only reads public pull request data. It does not comment, label, update, or otherwise write to GitHub.
-
-## Usage
+## Example Command
 
 ```sh
 pnpm dev repo corsairdev/corsair --limit 10
 ```
 
-The repository argument must use `owner/repo` format. `--limit` is optional and defaults to 10.
+The repository argument must use `owner/repo` format. `--limit` defaults to 10.
 
-To include changed file paths under each pull request, add `--files`:
+## Report Mode
 
-```sh
-pnpm dev repo corsairdev/corsair --limit 2 --files
-```
-
-Rules are printed by default. To hide them, add `--no-rules`:
+Generate a local markdown report:
 
 ```sh
-pnpm dev repo corsairdev/corsair --limit 2 --no-rules
+pnpm dev repo corsairdev/corsair --limit 10 --report
 ```
 
-To include the full scoring breakdown, add `--breakdown`:
+Default report path:
 
-```sh
-pnpm dev repo corsairdev/corsair --limit 2 --breakdown
+```text
+reports/triage-report.md
 ```
 
-To generate a founder-ready markdown report, add `--report`:
-
-```sh
-pnpm dev repo corsairdev/corsair --limit 20 --report
-```
-
-By default, reports are written to `reports/triage-report.md`. Use `--report-path` to choose another local path:
+Choose another local path:
 
 ```sh
 pnpm dev repo corsairdev/corsair --limit 20 --report --report-path reports/corsair.md
 ```
 
-## Current Scope
+## What It Checks
 
-TriageKit currently fetches open pull requests and prints:
+TriageKit currently checks:
 
-- PR number
-- title
-- author login
-- draft status
-- state
-- HTML URL
-- created date
-- updated date
-- files changed
-- additions and deletions
-- detected package roots from `packages/<name>/...` paths
+- PR metadata: title, author, draft status, state, URL, dates
+- changed files, additions, and deletions
+- package roots under `packages/<name>/...`
 - detected package names
-- whether files touch `demo/testing/`
-- whether files touch core/framework areas such as `packages/corsair/`, `packages/cli/`, `packages/studio/`, `packages/mcp/`, `packages/db/`, `packages/api/`, or `apps/`
-- deterministic readiness-rule results
-- a 0-100 readiness score
-- a maintainer-facing classification and founder action
-- blockers and risk signals
-- optional local markdown report output
-
-## Rule Engine
-
-The rule engine prints readiness signals, not merge decisions.
-
-Implemented rules:
-
-- draft PR status
-- linked issue reference
-- detected package roots
-- demo/testing updates for plugin or integration PRs
-- core/framework touches
-- size risk
-- unsafe TypeScript patch patterns
+- whether the PR touches `demo/testing/`
+- whether the PR touches core/framework areas
+- linked issue references
 - PR description quality
 - testing proof in the PR body
-- auth/webhook notes for plugin or integration PRs
+- risky TypeScript patch patterns
+- plugin/integration auth, webhook, schema, or endpoint signals
+- size and core-touch risk
 
-## Scoring And Classification
+It then prints:
 
-The scoring model converts deterministic rule results into a 0-100 readiness score, classification, founder action, blockers, and risk signals. The score is a triage signal to prioritize review effort; it is not a merge decision.
+- deterministic rule results
+- a 0-100 readiness score
+- a maintainer-facing classification
+- founder action text
+- blockers and risk signals
 
 Classifications:
 
@@ -112,23 +94,37 @@ Classifications:
 - Risky / broad
 - Not ready
 
-Use `--breakdown` to print each rule's point contribution.
+## Useful Flags
 
-## Report Mode
+```sh
+pnpm dev repo corsairdev/corsair --limit 2 --files
+pnpm dev repo corsairdev/corsair --limit 2 --breakdown
+pnpm dev repo corsairdev/corsair --limit 2 --no-rules
+pnpm dev repo corsairdev/corsair --limit 10 --report
+```
 
-Report mode writes a local markdown report and keeps terminal output compact. The report includes:
+## What It Does Not Do
 
-- repository and generation metadata
-- bucket counts by classification
-- most urgent author actions
-- highest-risk PRs
-- PR cards grouped by classification
-- founder action, blockers, risk signals, key rule results, and a deterministic suggested contributor comment
+TriageKit does not:
 
-Report mode is still read-only with respect to GitHub. TriageKit does not create comments, labels, GitHub Actions, or AI summaries.
+- verify code correctness
+- replace CI, Greptile, or human review
+- run untrusted PR code
+- call AI or model APIs
+- comment on GitHub PRs
+- add labels
+- trigger GitHub Actions
+- write to GitHub
 
-Out of scope for the current phase: GitHub comments, labels, GitHub Actions, and AI summaries.
+## Demo
 
-## Future Phases
+See [docs/demo.md](docs/demo.md) for the founder-demo walkthrough.
 
-Future versions may add review-readiness reports, configurable triage rules, markdown output, CI-friendly modes, and maintainer-focused summaries.
+## Future Possibilities
+
+- GitHub Action mode
+- GitHub PR comments
+- labels
+- custom rulesets
+- Greptile and CI signal ingestion
+- project-specific maintainer policies
