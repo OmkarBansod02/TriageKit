@@ -47,6 +47,18 @@ To include the full scoring breakdown, add `--breakdown`:
 pnpm dev repo corsairdev/corsair --limit 2 --breakdown
 ```
 
+To generate a founder-ready markdown report, add `--report`:
+
+```sh
+pnpm dev repo corsairdev/corsair --limit 20 --report
+```
+
+By default, reports are written to `reports/triage-report.md`. Use `--report-path` to choose another local path:
+
+```sh
+pnpm dev repo corsairdev/corsair --limit 20 --report --report-path reports/corsair.md
+```
+
 ## Current Scope
 
 TriageKit currently fetches open pull requests and prints:
@@ -69,6 +81,7 @@ TriageKit currently fetches open pull requests and prints:
 - a 0-100 readiness score
 - a maintainer-facing classification and founder action
 - blockers and risk signals
+- optional local markdown report output
 
 ## Rule Engine
 
@@ -87,9 +100,9 @@ Implemented rules:
 - testing proof in the PR body
 - auth/webhook notes for plugin or integration PRs
 
-## Scoring
+## Scoring And Classification
 
-The Phase 4 scoring model converts deterministic rule results into a 0-100 readiness score, classification, founder action, blockers, and risk signals. The score is a triage signal to prioritize review effort; it is not a merge decision.
+The scoring model converts deterministic rule results into a 0-100 readiness score, classification, founder action, blockers, and risk signals. The score is a triage signal to prioritize review effort; it is not a merge decision.
 
 Classifications:
 
@@ -101,7 +114,20 @@ Classifications:
 
 Use `--breakdown` to print each rule's point contribution.
 
-Out of scope for the current phase: markdown reports, comments, labels, GitHub Actions, and AI summaries.
+## Report Mode
+
+Report mode writes a local markdown report and keeps terminal output compact. The report includes:
+
+- repository and generation metadata
+- bucket counts by classification
+- most urgent author actions
+- highest-risk PRs
+- PR cards grouped by classification
+- founder action, blockers, risk signals, key rule results, and a deterministic suggested contributor comment
+
+Report mode is still read-only with respect to GitHub. TriageKit does not create comments, labels, GitHub Actions, or AI summaries.
+
+Out of scope for the current phase: GitHub comments, labels, GitHub Actions, and AI summaries.
 
 ## Future Phases
 

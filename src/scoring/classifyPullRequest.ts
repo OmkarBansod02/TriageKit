@@ -17,20 +17,20 @@ export function classifyPullRequest({
     return "not_ready";
   }
 
-  if (score >= 85 && blockers.length === 0 && riskSignals.length <= 1) {
+  if (blockers.length > 0) {
+    return "needs_author_action";
+  }
+
+  if (score >= 85 && riskSignals.length <= 1) {
     return "ready_for_founder_review";
   }
 
-  if (score >= 75 && blockers.length === 0) {
+  if (score >= 75) {
     return "almost_ready";
   }
 
-  if (riskSignals.length >= 2 && score < 80) {
+  if (riskSignals.length >= 2) {
     return "risky";
-  }
-
-  if (blockers.length > 0) {
-    return "needs_author_action";
   }
 
   return "needs_author_action";

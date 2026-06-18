@@ -1,17 +1,29 @@
 import { Command, InvalidArgumentError } from "commander";
 import { RequestError } from "@octokit/request-error";
+import { mkdir, writeFile } from "node:fs/promises";
+import { dirname } from "node:path";
 
 import { detectPackageChanges } from "./analysis/detectPackageChanges.js";
 import { getPullRequestFiles } from "./github/getPullRequestFiles.js";
 import { getPullRequests } from "./github/getPullRequests.js";
+import {
+  createClassificationCounts,
+  formatClassification,
+  formatList,
+  formatRuleResult,
+  formatYesNo,
+} from "./report/formatters.js";
+import { generateMarkdownReport } from "./report/generateMarkdownReport.js";
 import { runRules } from "./rules/runRules.js";
 import { scorePullRequest } from "./scoring/scorePullRequest.js";
 import type { PullRequestFileSummary, PullRequestMetadata, RepositorySlug } from "./github/types.js";
-import type { RuleResult, RuleStatus } from "./rules/types.js";
-import type { TriageClassification, TriageScore } from "./scoring/types.js";
+import type { AnalyzedPullRequest } from "./report/types.js";
+import type { RuleResult } from "./rules/types.js";
+import type { TriageScore } from "./scoring/types.js";
 
 const DEFAULT_LIMIT = 10;
 const MAX_LIMIT = 100;
+const DEFAULT_REPORT_PATH = "reports/triage-report.md";
 
 const program = new Command();
 
@@ -44,10 +56,6 @@ function formatDate(value: string): string {
   return new Date(value).toISOString();
 }
 
-function formatList(values: string[]): string {
-  return values.length > 0 ? values.join(", ") : "none";
-}
-
 function printPullRequestMetadata(pullRequest: PullRequestMetadata): void {
   console.log(`#${pullRequest.number} ${pullRequest.title}`);
   console.log(`Author: ${pullRequest.authorLogin}`);
@@ -64,43 +72,15 @@ function printFileSummary(summary: PullRequestFileSummary): void {
   console.log(`Deletions: ${summary.totalDeletions}`);
   console.log(`Package roots: ${formatList(summary.packageRoots)}`);
   console.log(`Detected packages: ${formatList(summary.detectedPackageNames)}`);
-  console.log(`Touches demo/testing: ${summary.touchesDemoTesting ? "yes" : "no"}`);
-  console.log(`Touches core: ${summary.touchesCore ? "yes" : "no"}`);
-}
-
-function statusIcon(status: RuleStatus): string {
-  switch (status) {
-    case "pass":
-      return "✅";
-    case "fail":
-      return "❌";
-    case "warning":
-      return "⚠️";
-    case "unknown":
-      return "➖";
-  }
+  console.log(`Touches demo/testing: ${formatYesNo(summary.touchesDemoTesting)}`);
+  console.log(`Touches core: ${formatYesNo(summary.touchesCore)}`);
 }
 
 function printRuleResults(results: RuleResult[]): void {
   console.log("Rules:");
 
   for (const result of results) {
-    console.log(`${statusIcon(result.status)} ${result.label}: ${result.reason}`);
-  }
-}
-
-function formatClassification(classification: TriageClassification): string {
-  switch (classification) {
-    case "ready_for_founder_review":
-      return "Ready for founder review";
-    case "almost_ready":
-      return "Almost ready";
-    case "needs_author_action":
-      return "Needs author action";
-    case "risky":
-      return "Risky / broad";
-    case "not_ready":
-      return "Not ready";
+    console.log(formatRuleResult(result));
   }
 }
 
@@ -133,48 +113,43 @@ function printTriageScore(score: TriageScore, options: { breakdown: boolean }): 
   }
 }
 
-async function printPullRequests(
+async function analyzePullRequest(
+  repository: RepositorySlug,
+  pullRequest: PullRequestMetadata,
+  options: { token?: string },
+): Promise<AnalyzedPullRequest> {
+  const changedFiles = await getPullRequestFiles({
+    ...repository,
+    pullNumber: pullRequest.number,
+    token: options.token,
+  });
+  const summary = detectPackageChanges(changedFiles);
+  const ruleResults = runRules({
+    pullRequest,
+    changedFiles,
+    summary,
+  });
+  const triageScore = scorePullRequest(ruleResults);
+
+  return {
+    pullRequest,
+    changedFiles,
+    summary,
+    ruleResults,
+    triageScore,
+  };
+}
+
+async function analyzePullRequests(
   repository: RepositorySlug,
   pullRequests: PullRequestMetadata[],
-  options: { token?: string; files: boolean; rules: boolean; breakdown: boolean },
-): Promise<void> {
-  if (pullRequests.length === 0) {
-    console.log("No open pull requests found.");
-    return;
-  }
+  options: { token?: string },
+): Promise<AnalyzedPullRequest[]> {
+  const analyzedPullRequests: AnalyzedPullRequest[] = [];
 
   for (const pullRequest of pullRequests) {
-    printPullRequestMetadata(pullRequest);
-
     try {
-      const changedFiles = await getPullRequestFiles({
-        ...repository,
-        pullNumber: pullRequest.number,
-        token: options.token,
-      });
-      const summary = detectPackageChanges(changedFiles);
-
-      printFileSummary(summary);
-
-      if (options.rules) {
-        const ruleResults = runRules({
-          pullRequest,
-          changedFiles,
-          summary,
-        });
-
-        printRuleResults(ruleResults);
-        printTriageScore(scorePullRequest(ruleResults), {
-          breakdown: options.breakdown,
-        });
-      }
-
-      if (options.files) {
-        console.log("Changed files:");
-        for (const file of changedFiles) {
-          console.log(`- ${file.filename}`);
-        }
-      }
+      analyzedPullRequests.push(await analyzePullRequest(repository, pullRequest, options));
     } catch (error) {
       if (error instanceof RequestError) {
         console.warn(
@@ -187,8 +162,66 @@ async function printPullRequests(
         console.warn(`Warning: could not fetch changed files for PR #${pullRequest.number}: ${message}`);
       }
     }
+  }
+
+  return analyzedPullRequests;
+}
+
+function printPullRequests(
+  analyzedPullRequests: AnalyzedPullRequest[],
+  options: { files: boolean; rules: boolean; breakdown: boolean },
+): void {
+  if (analyzedPullRequests.length === 0) {
+    console.log("No open pull requests found.");
+    return;
+  }
+
+  for (const analyzedPullRequest of analyzedPullRequests) {
+    printPullRequestMetadata(analyzedPullRequest.pullRequest);
+    printFileSummary(analyzedPullRequest.summary);
+
+    if (options.rules) {
+      printRuleResults(analyzedPullRequest.ruleResults);
+      printTriageScore(analyzedPullRequest.triageScore, {
+        breakdown: options.breakdown,
+      });
+    }
+
+    if (options.files) {
+      console.log("Changed files:");
+      for (const file of analyzedPullRequest.changedFiles) {
+        console.log(`- ${file.filename}`);
+      }
+    }
 
     console.log("");
+  }
+}
+
+async function writeReport(
+  repository: string,
+  reportPath: string,
+  pullRequests: AnalyzedPullRequest[],
+): Promise<void> {
+  const markdown = generateMarkdownReport({
+    repository,
+    generatedAt: new Date().toISOString(),
+    pullRequests,
+  });
+
+  await mkdir(dirname(reportPath), { recursive: true });
+  await writeFile(reportPath, markdown, "utf8");
+}
+
+function printReportSummary(reportPath: string, pullRequests: AnalyzedPullRequest[]): void {
+  const counts = createClassificationCounts(pullRequests);
+
+  console.log(`Report written to ${reportPath}`);
+  console.log(`PRs scanned: ${pullRequests.length}`);
+  console.log("Counts per bucket:");
+
+  for (const [classification, count] of Object.entries(counts)) {
+    console.log(`- ${formatClassification(classification as keyof typeof counts)}: ${count}`);
   }
 }
 
@@ -232,10 +265,19 @@ program
   .option("--no-rules", "do not print readiness rule results")
   .option("--breakdown", "print full score breakdown")
   .option("--no-breakdown", "do not print full score breakdown")
+  .option("--report", "write a markdown triage report")
+  .option("--report-path <path>", "path for markdown triage report", DEFAULT_REPORT_PATH)
   .action(
     async (
       repository: RepositorySlug,
-      options: { limit: number; files: boolean; rules: boolean; breakdown?: boolean },
+      options: {
+        limit: number;
+        files: boolean;
+        rules: boolean;
+        breakdown?: boolean;
+        report: boolean;
+        reportPath: string;
+      },
     ) => {
     try {
       const token = process.env.GITHUB_TOKEN;
@@ -245,8 +287,18 @@ program
         token,
       });
 
-      await printPullRequests(repository, pullRequests, {
+      const analyzedPullRequests = await analyzePullRequests(repository, pullRequests, {
         token,
+      });
+
+      if (options.report) {
+        const repositoryName = `${repository.owner}/${repository.repo}`;
+        await writeReport(repositoryName, options.reportPath, analyzedPullRequests);
+        printReportSummary(options.reportPath, analyzedPullRequests);
+        return;
+      }
+
+      printPullRequests(analyzedPullRequests, {
         files: options.files,
         rules: options.rules,
         breakdown: options.breakdown === true,
